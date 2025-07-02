@@ -25,6 +25,7 @@ export const authRequired = jwt({
     secret: config.SECRET_TOKEN,
     userProperty: 'payload',
     getToken: getTokenFromHeaders,
+    algorithms: ['HS256'],
 })
 
 export const useIdentifyUser = jwt({
@@ -32,6 +33,7 @@ export const useIdentifyUser = jwt({
     userProperty: 'payload',
     getToken: getTokenFromHeaders,
     credentialsRequired: false,
+    algorithms: ['HS256'],
 })
 
 export const useAuthErrorHandling = (err, req, res, next) => {
