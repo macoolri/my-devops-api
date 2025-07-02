@@ -40,7 +40,8 @@ mongoose
         setRoutes(app)
 
         if (!module.parent) {
-            app.listen(app.get('port'), () => console.log(`Listening on port ${app.get('port')}`))
+            const port = process.env.PORT || config.PORT;
+            app.listen(port, () => console.log(`Listening on port ${port}`));
         }
     })
     .catch(err => console.error(err))
