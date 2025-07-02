@@ -1,6 +1,6 @@
 import passport from 'passport'
 
-import User from '../models/User'
+import User from '../models/user'
 import Base from './baseController'
 
 export default class UserController extends Base {
