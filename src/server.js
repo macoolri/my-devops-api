@@ -27,7 +27,6 @@ app.use(passport.initialize());
 
 // Middleware для сбора метрик HTTP-запросов
 app.use((req, res, next) => {
-
     const end = httpRequestDurationMicroseconds.startTimer();
     res.on('finish', () => {
         const route = req.route ? req.route.path : req.path;
@@ -63,29 +62,50 @@ mongoose
 
         if (!module.parent) {
             const port = process.env.PORT || config.PORT;
-            const PUSHGATEWAY_URL = 'http://prometheus-pushgateway.internal:9091';
 
-            const pushMetricsToGateway = async () => {
+            const GRAFANA_CLOUD_PROMETHEUS_URL = 'https://prometheus-prod-39-prod-eu-north-0.grafana.net/api/prom/push';
+
+            const GRAFANA_CLOUD_USERNAME = process.env.GRAFANA_CLOUD_USERNAME;
+            const GRAFANA_CLOUD_PASSWORD = process.env.GRAFANA_CLOUD_PASSWORD;
+
+            if (!GRAFANA_CLOUD_USERNAME || !GRAFANA_CLOUD_PASSWORD) {
+                console.warn('WARNING: GRAFANA_CLOUD_USERNAME or GRAFANA_CLOUD_PASSWORD environment variables are missing. Metrics push will fail.');
+            }
+
+            const pushMetricsToGrafanaCloud = async () => {
                 try {
                     const metrics = await register.metrics();
-                    const response = await fetch(`${PUSHGATEWAY_URL}/metrics/job/node_app_metrics`, {
+                    const headers = {
+                        'Content-Type': register.contentType,
+                        'Content-Encoding': 'gzip'
+                    };
+
+                    if (GRAFANA_CLOUD_USERNAME && GRAFANA_CLOUD_PASSWORD) {
+                        const credentials = Buffer.from(`${GRAFANA_CLOUD_USERNAME}:${GRAFANA_CLOUD_PASSWORD}`).toString('base64');
+                        headers['Authorization'] = `Basic ${credentials}`;
+                    }
+
+                    const zlib = require('zlib');
+                    const gzippedMetrics = zlib.gzipSync(metrics);
+
+                    const response = await fetch(GRAFANA_CLOUD_PROMETHEUS_URL, {
                         method: 'POST',
-                        headers: { 'Content-Type': register.contentType },
-                        body: metrics
+                        headers: headers,
+                        body: gzippedMetrics
                     });
 
                     if (!response.ok) {
-                        console.error(`Failed to push metrics to Pushgateway: ${response.status} ${response.statusText}`);
+                        console.error(`Failed to push metrics to Grafana Cloud: ${response.status} ${response.statusText} - Response: ${await response.text()}`);
                     } else {
-                        console.log('Metrics successfully pushed to Pushgateway.');
+                        console.log('Metrics successfully pushed to Grafana Cloud.');
                     }
                 } catch (error) {
-                    console.error('Error pushing metrics to Pushgateway:', error);
+                    console.error('Error pushing metrics to Grafana Cloud:', error);
                 }
             };
 
-            setInterval(pushMetricsToGateway, 15 * 1000);
-            pushMetricsToGateway();
+            setInterval(pushMetricsToGrafanaCloud, 15 * 1000);
+            pushMetricsToGrafanaCloud();
 
             app.listen(port, () => console.log(`Listening on port ${port}`));
         }
