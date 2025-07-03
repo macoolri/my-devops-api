@@ -4,6 +4,7 @@ import { register, httpRequestCounter, httpRequestDurationMicroseconds } from '.
 import cors from 'cors';
 import passport from 'passport';
 import fetch from 'node-fetch';
+import snappy from 'snappy';
 
 import setRoutes from './routes';
 import usePassport from './passport';
@@ -67,9 +68,10 @@ mongoose
                 const pushMetricsToGrafanaCloud = async () => {
                     try {
                         const metrics = await register.metrics();
-                        
+
                         const headers = {
-                            'Content-Type': 'application/x-openmetrics-text; version=1.0.0; charset=utf-8',
+                            'Content-Type': 'application/x-protobuf', 
+                            'Content-Encoding': 'snappy',
                             'Accept': 'application/json',
                         };
 
@@ -78,10 +80,12 @@ mongoose
                             headers['Authorization'] = `Basic ${credentials}`;
                         }
 
+                        const snappiedMetrics = await snappy.compress(Buffer.from(metrics));
+
                         const response = await fetch(GRAFANA_CLOUD_PROMETHEUS_URL, {
                             method: 'POST',
                             headers: headers,
-                            body: metrics
+                            body: snappiedMetrics
                         });
 
                         if (!response.ok) {
@@ -107,5 +111,3 @@ mongoose
         }
     })
     .catch(err => console.error(err));
-
-export default app;
