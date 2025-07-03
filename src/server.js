@@ -3,8 +3,7 @@ import mongoose from 'mongoose';
 import { register, httpRequestCounter, httpRequestDurationMicroseconds } from './utils/metrics';
 import cors from 'cors';
 import passport from 'passport';
-
-import net from 'net';
+import fetch from 'node-fetch';
 
 import setRoutes from './routes';
 import usePassport from './passport';
@@ -45,7 +44,9 @@ app.use((req, res, next) => {
 mongoose.Promise = global.Promise;
 mongoose.set('debug', config.MONGODB_DEBUG);
 mongoose
-    .connect(config.MONGODB_URI, {})
+    .connect(
+        config.MONGODB_URI
+    )
     .then(() => {
         if (process.env.NODE_ENV !== 'test') {
             console.log('Connected to MongoDB', config.MONGODB_URI);
@@ -56,85 +57,45 @@ mongoose
         if (!module.parent) {
             const port = process.env.PORT || config.PORT;
 
-            const GRAPHITE_HOST = process.env.GRAFANA_CLOUD_GRAPHITE_HOST;
-            const GRAPHITE_PORT = parseInt(process.env.GRAFANA_CLOUD_GRAPHITE_PORT || '2003', 10);
-            const GRAPHITE_USERNAME = process.env.GRAFANA_CLOUD_USERNAME;
-            const GRAPHITE_API_KEY = process.env.GRAFANA_CLOUD_API_KEY;
+            const GRAFANA_CLOUD_PROMETHEUS_URL = process.env.GRAFANA_CLOUD_PROMETHEUS_URL;
+            const GRAFANA_CLOUD_USERNAME = process.env.GRAFANA_CLOUD_USERNAME;
+            const GRAFANA_CLOUD_PASSWORD = process.env.GRAFANA_CLOUD_PASSWORD;
 
-            if (!GRAPHITE_HOST || !GRAPHITE_USERNAME || !GRAPHITE_API_KEY) {
-                console.warn('WARNING: Grafana Cloud Graphite credentials are missing. Metrics will not be pushed.');
+            if (!GRAFANA_CLOUD_USERNAME || !GRAFANA_CLOUD_PASSWORD || !GRAFANA_CLOUD_PROMETHEUS_URL) {
+                console.warn('WARNING: Grafana Cloud Prometheus credentials or URL are missing. Metrics push will fail.');
             } else {
-                const sendMetricToGraphite = (metricLine) => {
-                    const client = new net.Socket();
-                    client.connect(GRAPHITE_PORT, GRAPHITE_HOST, () => {
-                        const authString = `${GRAPHITE_USERNAME} ${GRAPHITE_API_KEY}\n`;
-                        client.write(authString + metricLine + '\n');
-                        client.end();
-                    });
-
-                    client.on('error', (err) => {
-                        console.error('Graphite TCP Error:', err.message);
-                    });
-
-                    client.on('close', () => {
-                        console.log('Graphite connection closed.');
-                    });
-                };
-
-
-                // Функция для сбора и отправки всех метрик
-                const pushMetricsToGraphite = async () => {
+                const pushMetricsToGrafanaCloud = async () => {
                     try {
-                        const promMetrics = await register.metrics();
-                        const lines = promMetrics.split('\n');
-                        const timestamp = Math.floor(Date.now() / 1000);
+                        const metrics = await register.metrics();
+                        
+                        const headers = {
+                            'Content-Type': 'application/x-openmetrics-text; version=1.0.0; charset=utf-8',
+                            'Accept': 'application/json',
+                        };
 
-                        const prefix = 'node_app.';
-
-                        for (const line of lines) {
-                            if (line.startsWith('#') || line.trim() === '') {
-                                continue;
-                            }
-
-                            const parts = line.split(' ');
-                            if (parts.length < 2) continue;
-
-                            let metricNameWithLabels = parts[0];
-                            const value = parseFloat(parts[1]);
-
-                            let metricName = metricNameWithLabels.split('{')[0];
-                            
-                            if (metricNameWithLabels.includes('{')) {
-                                const labelsPart = metricNameWithLabels.substring(
-                                    metricNameWithLabels.indexOf('{') + 1,
-                                    metricNameWithLabels.indexOf('}')
-                                );
-                                labelsPart.split(',').forEach(label => {
-                                    const [key, val] = label.split('=');
-                                    if (key && val) {
-                                        const cleanKey = key.replace(/[^a-zA-Z0-9_]/g, '_');
-                                        const cleanVal = val.replace(/"/g, '').replace(/[^a-zA-Z0-9_\-.]/g, '_');
-                                        metricName += `.${cleanKey}_${cleanVal}`;
-                                    }
-                                });
-                            }
-
-                            if (!isNaN(value)) {
-                                const fullMetricName = `${prefix}${metricName}`;
-                                const metricLine = `${fullMetricName} ${value} ${timestamp}`;
-
-                                sendMetricToGraphite(metricLine);
-                            }
+                        if (GRAFANA_CLOUD_USERNAME && GRAFANA_CLOUD_PASSWORD) {
+                            const credentials = Buffer.from(`${GRAFANA_CLOUD_USERNAME}:${GRAFANA_CLOUD_PASSWORD}`).toString('base64');
+                            headers['Authorization'] = `Basic ${credentials}`;
                         }
-                        console.log('Attempted to send metrics to Graphite.');
 
+                        const response = await fetch(GRAFANA_CLOUD_PROMETHEUS_URL, {
+                            method: 'POST',
+                            headers: headers,
+                            body: metrics
+                        });
+
+                        if (!response.ok) {
+                            console.error(`Failed to push metrics to Grafana Cloud Prometheus: ${response.status} ${response.statusText} - Response: ${await response.text()}`);
+                        } else {
+                            console.log('Metrics successfully pushed to Grafana Cloud Prometheus.');
+                        }
                     } catch (error) {
-                        console.error('Error pushing metrics to Graphite:', error);
+                        console.error('Error pushing metrics to Grafana Cloud Prometheus:', error);
                     }
                 };
 
-                setInterval(pushMetricsToGraphite, 15 * 1000);
-                pushMetricsToGraphite();
+                setInterval(pushMetricsToGrafanaCloud, 15 * 1000);
+                pushMetricsToGrafanaCloud();
             }
 
             app.get('/metrics', async (req, res) => {
