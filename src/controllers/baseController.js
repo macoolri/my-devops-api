@@ -20,71 +20,67 @@ export default class BaseContrroller {
         res.status(status_code).json({ status: 'OK', data: data })
     }
 
-    get = (req, res) => {
-        this.model.findOne({ _id: req.params.id }, (err, doc) => {
-            if (err) {
-                this._respondError(res, err, 'get')
-            }
+    get = async (req, res) => {
+        try {
+            const doc = await this.model.findOne({ _id: req.params.id })
             this._respondOk(res, doc)
-        })
+        } catch (err) {
+            this._respondError(res, err, 'get')
+        }
     }
 
-    all = (req, res) => {
-        this.model.find({}, (err, docs) => {
-            if (err) {
-                this._respondError(res, err, 'all')
-            }
+    all = async (req, res) => {
+        try {
+            const docs = await this.model.find({})
             this._respondOk(res, docs)
-        })
+        } catch (err) {
+            this._respondError(res, err, 'all')
+        }
     }
 
-    count = (req, res) => {
-        this.model.countDocuments(
-            {}, // filter
-            (err, count) => {
-                if (err) {
-                    this._respondError(res, err, 'count')
-                }
-                res.status(200).json({ count: count, status: 'OK' })
-            }
-        )
+    count = async (req, res) => {
+        try {
+            const count = await this.model.countDocuments({})
+            res.status(200).json({ count: count, status: 'OK' })
+        } catch (err) {
+            this._respondError(res, err, 'count')
+        }
     }
 
-    store = (req, res) => {
-        const obj = new this.model(req.body)
-        obj.save((err, doc) => {
-            if (err) {
-                if (err.code === 11000) {
-                    return res.status(409).json({
-                        error: {
-                            message: 'Duplicate key error. This record already exists.',
-                            type: 'DuplicateKeyError',
-                            model: this.model.collection.collectionName
-                        }
-                    });
-                }
-                return this._respondError(res, err, 'store');
-            }
-
-            this._respondOk(res, doc);
-        });
-    }
-
-    update = (req, res) => {
-        this.model.findOneAndUpdate({ _id: req.params.id }, req.body, { new: true }, (err, doc) => {
-            if (err) {
-                this._respondError(res, err, 'update')
-            }
+    store = async (req, res) => {
+        try {
+            const obj = new this.model(req.body)
+            const doc = await obj.save()
             this._respondOk(res, doc)
-        })
+        } catch (err) {
+            if (err.code === 11000) {
+                return res.status(409).json({
+                    error: {
+                        message: 'Duplicate key error. This record already exists.',
+                        type: 'DuplicateKeyError',
+                        model: this.model.collection.collectionName
+                    }
+                })
+            }
+            return this._respondError(res, err, 'store')
+        }
     }
 
-    delete = (req, res) => {
-        this.model.findOneAndRemove({ _id: req.params.id }, (err, doc) => {
-            if (err) {
-                this._respondError(res, err, 'delete')
-            }
+    update = async (req, res) => {
+        try {
+            const doc = await this.model.findOneAndUpdate({ _id: req.params.id }, req.body, { new: true })
             this._respondOk(res, doc)
-        })
+        } catch (err) {
+            this._respondError(res, err, 'update')
+        }
+    }
+
+    delete = async (req, res) => {
+        try {
+            const doc = await this.model.findOneAndDelete({ _id: req.params.id })
+            this._respondOk(res, doc)
+        } catch (err) {
+            this._respondError(res, err, 'delete')
+        }
     }
 }

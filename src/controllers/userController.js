@@ -25,20 +25,20 @@ export default class UserController extends Base {
         })(req, res, next)
     }
 
-    signup = (req, res) => {
+    signup = async (req, res) => {
         const obj = new this.model(req.body)
         obj.setPassword(req.body.password)
 
-        return obj.save((err, doc) => {
-            if (err) {
-                if (err.message.indexOf('duplicate key error') !== -1) {
-                    err.message = 'Email already exists'
-                    return this._respondError(res, err, 'signup')
-                }
-                return this._respondError(res, err, 'signup')
-            }
-
+        try {
+            const doc = await obj.save()
             res.json({ user: obj.toAuthJSON() })
-        })
+        } catch (err) {
+            if (err.code === 11000 || (err.message && err.message.indexOf('duplicate key error') !== -1)) {
+                const customError = new Error('Email already exists');
+                customError.name = 'DuplicateKeyError';
+                return this._respondError(res, customError, 'signup');
+            }
+            return this._respondError(res, err, 'signup')
+        }
     }
 }
