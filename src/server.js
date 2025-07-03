@@ -1,6 +1,6 @@
 import express from 'express'
 import mongoose from 'mongoose'
-import { register, httpRequestCounter, httpRequestDurationMicroseconds } from './metrics';
+import { register, httpRequestCounter, httpRequestDurationMicroseconds } from './utils/metrics';
 import cors from 'cors'
 import passport from 'passport'
 
