@@ -12,7 +12,6 @@ import config from './config';
 
 // Initial Setting
 
-mongoose.set('useFindAndModify', false);
 usePassport();
 
 // Express
