@@ -1,5 +1,6 @@
 import express from 'express'
 import mongoose from 'mongoose'
+import { register, httpRequestCounter, httpRequestDurationMicroseconds } from './metrics';
 import cors from 'cors'
 import passport from 'passport'
 
@@ -23,6 +24,29 @@ app.use(express.json())
 app.use(express.urlencoded({ extended: true, limit: '100kb' }))
 app.use(passport.initialize())
 
+// Middleware для сбора метрик HTTP-запросов
+app.use((req, res, next) => {
+    if (req.path === '/metrics') {
+        return next();
+    }
+
+    const end = httpRequestDurationMicroseconds.startTimer();
+    res.on('finish', () => {
+        const route = req.route ? req.route.path : req.path;
+        httpRequestCounter.inc({
+            method: req.method,
+            route: route,
+            status_code: res.statusCode,
+        });
+        end({
+            method: req.method,
+            route: route,
+        status_code: res.statusCode,
+        });
+    });
+    next();
+});
+
 // Mongoose
 
 mongoose.Promise = global.Promise
@@ -41,6 +65,10 @@ mongoose
 
         if (!module.parent) {
             const port = process.env.PORT || config.PORT;
+            app.get('/metrics', async (req, res) => {
+                res.set('Content-Type', register.contentType);
+                res.end(await register.metrics());
+            });
             app.listen(port, () => console.log(`Listening on port ${port}`));
         }
     })
