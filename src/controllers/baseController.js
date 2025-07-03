@@ -53,16 +53,21 @@ export default class BaseContrroller {
     store = (req, res) => {
         const obj = new this.model(req.body)
         obj.save((err, doc) => {
-            // 11000 is the code for duplicate key error
-            if (err && err.code === 11000) {
-                res.sendStatus(400)
-            }
             if (err) {
-                this._respondError(res, err, 'store')
+                if (err.code === 11000) {
+                    return res.status(409).json({
+                        error: {
+                            message: 'Duplicate key error. This record already exists.',
+                            type: 'DuplicateKeyError',
+                            model: this.model.collection.collectionName
+                        }
+                    });
+                }
+                return this._respondError(res, err, 'store');
             }
 
-            this._respondOk(res, doc)
-        })
+            this._respondOk(res, doc);
+        });
     }
 
     update = (req, res) => {
