@@ -54,7 +54,7 @@ mongoose
         config.MONGODB_URI,
         {
             useNewUrlParser: true,
-            useUnifiedTopology: true 
+            useUnifiedTopology: true,
         }
     )
     .then(() => {
