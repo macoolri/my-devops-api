@@ -64,11 +64,40 @@ mongoose
         setRoutes(app)
 
         if (!module.parent) {
-            const port = process.env.PORT || config.PORT;
-            app.get('/metrics', async (req, res) => {
-                res.set('Content-Type', register.contentType);
-                res.end(await register.metrics());
-            });
+            const port = process.env.PORT || config.PORT;           
+            const metricsUser = process.env.USER_FOR_METRICS;
+            const metricsPass = process.env.PASS_FOR_METRICS;
+
+            if (metricsUser && metricsPass) {
+                const basicAuth = (req, res, next) => {
+                    const authHeader = req.headers.authorization;
+                    if (!authHeader) {
+                        res.setHeader('WWW-Authenticate', 'Basic realm="Metrics"');
+                        return res.status(401).send('Authentication required');
+                    }
+
+                    const auth = Buffer.from(authHeader.split(' ')[1], 'base64').toString();
+                    const [user, pass] = auth.split(':');
+
+                    if (user === metricsUser && pass === metricsPass) {
+                        return next();
+                    } else {
+                        res.setHeader('WWW-Authenticate', 'Basic realm="Metrics"');
+                        return res.status(401).send('Authentication failed');
+                    }
+                };
+
+                app.get('/metrics', basicAuth, async (req, res) => {
+                    res.set('Content-Type', register.contentType);
+                    res.end(await register.metrics());
+                });
+            } else {
+                console.warn('Metrics endpoint is not protected with basic auth. USER_FOR_METRICS or PASS_FOR_METRICS environment variables are missing.');
+                app.get('/metrics', async (req, res) => {
+                    res.set('Content-Type', register.contentType);
+                    res.end(await register.metrics());
+                });
+            }
             app.listen(port, () => console.log(`Listening on port ${port}`));
         }
     })
